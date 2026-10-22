@@ -32,6 +32,9 @@ let root=null;
 let statusTimer=null;
 let dlgAnchor=null;
 let blobUrl='';
+let origMain=null;
+let selMode=false;
+let sel=new Set();
 let dbp=null;
 function log(msg){
 logs.push(new Date().toLocaleTimeString()+' '+msg);
@@ -86,6 +89,9 @@ function applyActive(){
 const old=document.getElementById('fm-style');
 if(old)old.remove();
 if(blobUrl){URL.revokeObjectURL(blobUrl);blobUrl='';}
+const de=document.documentElement;
+if(origMain===null)origMain=de.style.getPropertyValue('--mainFontFamily')||'';
+if(origMain)de.style.setProperty('--mainFontFamily',origMain);else de.style.removeProperty('--mainFontFamily');
 const f=fonts.find(x=>x.id===activeId);
 if(!f)return;
 const fam=stripQ(f.fontFamily||f.name);
@@ -104,7 +110,9 @@ const s=document.createElement('style');
 s.id='fm-style';
 s.textContent=css;
 document.head.appendChild(s);
+de.style.setProperty('--mainFontFamily','"'+fam+'",sans-serif','important');
 log('已应用字体：'+fam);
+if(document.fonts&&document.fonts.load){document.fonts.load('16px "'+fam+'"').then(r=>log('字体加载结果：'+(r.length?'成功('+r.length+')':'未加载到字体文件，请检查链接或字体名'))).catch(e=>log('字体加载失败：'+e.message));}
 }
 function mk(o){
 return {id:uid(),name:o.name,fontFamily:o.fontFamily||o.name,url:o.url||'',cssImport:o.cssImport||'',type:o.type||'',originalName:o.originalName||'',source:o.source,blob:o.blob||null,createdAt:Date.now()};
@@ -238,6 +246,16 @@ applyActive();
 render();
 status('已删除');
 }
+async function doDeleteMany(ids){
+const set=new Set(ids);
+await dbReq('fonts','readwrite',s=>{ids.forEach(i=>s.delete(i));});
+fonts=fonts.filter(f=>!set.has(f.id));
+if(set.has(activeId)){activeId='';await dbReq('meta','readwrite',s=>s.put('','active'));applyActive();}
+sel=new Set();
+selMode=false;
+render();
+status('已删除 '+ids.length+' 个');
+}
 function doExport(){
 const out=[];
 let skip=0;
@@ -292,6 +310,20 @@ if(fi)fi.click();
 doExport();
 }else if(a==='toggle'){
 setActive(id===activeId?'':id).catch(e=>status('出错：'+e.message,true));
+}else if(a==='batch'){
+selMode=!selMode;
+sel=new Set();
+render();
+}else if(a==='selall'){
+sel=new Set(fonts.map(f=>f.id));
+render();
+}else if(a==='selnone'){
+sel=new Set();
+render();
+}else if(a==='delsel'){
+if(!sel.size){status('请先勾选字体',true);return;}
+const ids=Array.from(sel);
+showDialog('批量删除','<div>确定删除选中的 '+ids.length+' 个字体吗？</div>',()=>doDeleteMany(ids),'删除');
 }else if(a==='del'){
 const f=fonts.find(x=>x.id===id);
 if(!f)return;
@@ -300,9 +332,11 @@ showDialog('删除字体','<div>确定删除「'+esc(f.name)+'」吗？</div>',(
 }
 function render(){
 if(!root)return;
-const list=fonts.map(f=>'<article class="fm-card"><div class="fm-info"><b>'+esc(f.name)+(f.id===activeId?' <span class="fm-tag">使用中</span>':'')+'</b><span>'+esc(srcLabel(f))+' | '+esc(f.fontFamily)+'</span></div><div class="fm-actions"><button type="button" data-a="toggle" data-id="'+esc(f.id)+'" class="'+(f.id===activeId?'fm-on':'')+'">'+(f.id===activeId?'取消启用':'启用')+'</button><button type="button" data-a="del" data-id="'+esc(f.id)+'" class="danger">删除</button></div></article>').join('');
-root.innerHTML='<div class="fm-wrap"><div class="fm-top"><b>字体管理器</b><span class="fm-count">共 '+fonts.length+' 个</span></div><div class="fm-tools"><button type="button" class="fm-btn fm-primary" data-a="paste">粘贴导入</button><button type="button" class="fm-btn fm-light" data-a="file">导入文件</button><button type="button" class="fm-btn fm-light" data-a="export">导出JSON</button></div><input type="file" id="fm-file" class="fm-hidden" multiple accept=".ttf,.otf,.woff,.woff2,.json,.css,.txt"><div class="fm-list">'+list+(!fonts.length?'<div class="fm-empty">还没有字体</div>':'')+'</div><div id="fm-status"></div><details class="fm-details"><summary>运行日志（出问题时把这里的内容发给我）</summary><pre id="fm-log">'+esc(logs.join(NL))+'</pre></details></div>';
+const list=fonts.map(f=>'<article class="fm-card"><div class="fm-info"><b>'+(selMode?'<input type="checkbox" class="fm-chk" data-id="'+esc(f.id)+'"'+(sel.has(f.id)?' checked':'')+'>':'')+esc(f.name)+(f.id===activeId?' <span class="fm-tag">使用中</span>':'')+'</b><span>'+esc(srcLabel(f))+' | '+esc(f.fontFamily)+'</span></div>'+(selMode?'':'<div class="fm-actions"><button type="button" data-a="toggle" data-id="'+esc(f.id)+'" class="'+(f.id===activeId?'fm-on':'')+'">'+(f.id===activeId?'取消启用':'启用')+'</button><button type="button" data-a="del" data-id="'+esc(f.id)+'" class="danger">删除</button></div>')+'</article>').join('');
+const bar=selMode?'<div class="fm-tools"><button type="button" class="fm-btn fm-light" data-a="selall">全选</button><button type="button" class="fm-btn fm-light" data-a="selnone">取消全选</button><button type="button" class="fm-btn fm-primary" data-a="delsel">删除所选 ('+sel.size+')</button></div>':'';
+root.innerHTML='<div class="fm-wrap"><div class="fm-top"><b>字体管理器</b><span class="fm-count">共 '+fonts.length+' 个</span></div><div class="fm-tools"><button type="button" class="fm-btn fm-primary" data-a="paste">粘贴导入</button><button type="button" class="fm-btn fm-light" data-a="file">导入文件</button><button type="button" class="fm-btn fm-light" data-a="export">导出JSON</button><button type="button" class="fm-btn fm-light" data-a="batch">'+(selMode?'退出批量':'批量删除')+'</button></div>'+bar+'<input type="file" id="fm-file" class="fm-hidden" multiple accept=".ttf,.otf,.woff,.woff2,.json,.css,.txt"><div class="fm-list">'+list+(!fonts.length?'<div class="fm-empty">还没有字体</div>':'')+'</div><div id="fm-status"></div><details class="fm-details"><summary>运行日志（出问题时把这里的内容发给我）</summary><pre id="fm-log">'+esc(logs.join(NL))+'</pre></details></div>';
 root.querySelectorAll('[data-a]').forEach(b=>{b.onclick=()=>action(b.dataset.a,b.dataset.id,b);});
+root.querySelectorAll('.fm-chk').forEach(c=>{c.onchange=()=>{if(c.checked)sel.add(c.dataset.id);else sel.delete(c.dataset.id);const b=root.querySelector('[data-a="delsel"]');if(b)b.textContent='删除所选 ('+sel.size+')';};});
 const fi=root.querySelector('#fm-file');
 fi.onchange=()=>{const fs=Array.from(fi.files||[]);fi.value='';if(fs.length)importFiles(fs);};
 }

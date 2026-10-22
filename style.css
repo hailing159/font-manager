@@ -16,6 +16,7 @@
 .fm-info b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block}
 .fm-info span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;display:block;font-size:11px;opacity:.7;margin-top:2px}
 .fm-tag{font-size:10px;font-weight:400;padding:1px 6px;border-radius:8px;background:var(--SmartThemeQuoteColor,#2879d0);color:#fff}
+.fm-chk{width:auto;margin:0 8px 0 0;vertical-align:middle}
 .fm-actions{display:flex;gap:6px;margin-top:7px}
 .fm-actions button{flex:1;min-width:0;border:1px solid var(--SmartThemeBorderColor,rgba(127,127,127,.25));border-radius:6px;background:transparent;color:inherit;padding:6px 0;font-size:12px;cursor:pointer}
 .fm-actions button.fm-on{background:var(--SmartThemeQuoteColor,#2879d0);border-color:transparent;color:#fff}
