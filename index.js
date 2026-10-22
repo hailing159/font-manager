@@ -93,26 +93,37 @@ const de=document.documentElement;
 if(origMain===null)origMain=de.style.getPropertyValue('--mainFontFamily')||'';
 if(origMain)de.style.setProperty('--mainFontFamily',origMain);else de.style.removeProperty('--mainFontFamily');
 const f=fonts.find(x=>x.id===activeId);
-if(!f)return;
-const fam=stripQ(f.fontFamily||f.name);
+if(!f){log('已取消字体应用');return;}
+const fam=stripQ(f.fontFamily||f.name).replace(/[\\"']/g,'');
+if(!fam){log('应用失败：字体名称为空');return;}
 let css='';
 if(f.source==='css'){
-css=f.cssImport+NL;
+  // @import 必须放在样式表最前面；保留导入的完整 CSS。
+  css=(f.cssImport||'').trim()+NL;
 }else{
-let src=f.url;
-if(f.source==='file'&&f.blob){blobUrl=URL.createObjectURL(f.blob);src=blobUrl;}
-const fm=fmtOf(f);
-css='@font-face{font-family:"'+fam+'";src:url("'+cssUrl(src)+'")'+(fm?' format("'+fm+'")':'')+';font-display:swap}'+NL;
+  let src=f.url;
+  if(f.source==='file'&&f.blob){blobUrl=URL.createObjectURL(f.blob);src=blobUrl;}
+  const fm=fmtOf(f);
+  if(!src){log('应用失败：没有字体文件链接');return;}
+  css='@font-face{font-family:"'+fam+'";src:url("'+cssUrl(src)+'")'+(fm?' format("'+fm+'")':'')+';font-style:normal;font-weight:100 900;font-display:swap}'+NL;
 }
-css+=':root,body{--mainFontFamily:"'+fam+'",sans-serif}'+NL;
-css+='body,button,input,select,textarea{font-family:"'+fam+'",sans-serif}';
+const family='"'+fam+'",sans-serif';
+// 同时设置酒馆常用字体变量与全局元素，避免只修改 body 而被内部组件覆盖。
+css+=':root{--mainFontFamily:'+family+' !important;--SmartThemeFontFamily:'+family+' !important;}'+NL;
+css+='body,body *:not([class*="fa-"]):not([class*="icon"]):not([class*="material"]):not(svg):not(svg *){font-family:'+family+' !important;}'+NL;
+// 让表单控件也继承字体；图标字体类名排除在全局规则之外。
+css+='button,input,select,textarea{font-family:'+family+' !important;}';
 const s=document.createElement('style');
 s.id='fm-style';
 s.textContent=css;
-document.head.appendChild(s);
-de.style.setProperty('--mainFontFamily','"'+fam+'",sans-serif','important');
+(document.head||de).appendChild(s);
+de.style.setProperty('--mainFontFamily',family,'important');
 log('已应用字体：'+fam);
-if(document.fonts&&document.fonts.load){document.fonts.load('16px "'+fam+'"').then(r=>log('字体加载结果：'+(r.length?'成功('+r.length+')':'未加载到字体文件，请检查链接或字体名'))).catch(e=>log('字体加载失败：'+e.message));}
+if(document.fonts&&document.fonts.load){
+  document.fonts.load('16px "'+fam+'"').then(r=>{
+    log('字体加载结果：'+(r.length?'成功('+r.length+')':'未加载到字体文件；请检查字体名称、链接或跨域设置'));
+  }).catch(e=>log('字体加载失败：'+e.message));
+}
 }
 function mk(o){
 return {id:uid(),name:o.name,fontFamily:o.fontFamily||o.name,url:o.url||'',cssImport:o.cssImport||'',type:o.type||'',originalName:o.originalName||'',source:o.source,blob:o.blob||null,createdAt:Date.now()};
