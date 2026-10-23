@@ -43,3 +43,8 @@
 .fm-info{min-width:0}
 .fm-list{grid-template-columns:minmax(0,1fr)}
 @media(min-width:700px){.fm-list{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.fm-size{border:1px solid var(--SmartThemeBorderColor,rgba(127,127,127,.2));border-radius:10px;padding:9px 10px;margin-bottom:10px;background:var(--SmartThemeBlurTintColor,rgba(127,127,127,.04))}
+.fm-size-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;font-size:13px}
+.fm-size-head i{font-size:11px;opacity:.6}
+.fm-size-head .fm-btn{padding:3px 8px;margin-left:4px}
+#fm-size-range{width:100%;margin:0;cursor:pointer;accent-color:var(--SmartThemeQuoteColor,#2879d0)}

@@ -38,6 +38,22 @@ let sel=new Set();
 let dbp=null;
 let fontObserver=null;
 let fontOverrides=new Map();
+let chatSize=0;
+const SIZE_MIN=12;
+const SIZE_MAX=50;
+const SIZE_DEF=16;
+function applyChatSize(){
+const old=document.getElementById('fm-chat-size');
+if(old)old.remove();
+if(!chatSize)return;
+const s=document.createElement('style');
+s.id='fm-chat-size';
+s.textContent='#chat .mes_text,#chat .mes_text *:not([class*="fa-"]):not(svg):not(svg *){font-size:'+chatSize+'px !important;}';
+(document.head||document.documentElement).appendChild(s);
+}
+async function saveChatSize(){
+try{await dbReq('meta','readwrite',s=>s.put(chatSize,'chatSize'));}catch(e){log('保存聊天字号失败：'+e.message);}
+}
 function restoreFontOverrides(){
 if(fontObserver){fontObserver.disconnect();fontObserver=null;}
 fontOverrides.forEach((v,el)=>{
@@ -124,6 +140,8 @@ fonts.sort((a,b)=>(a.createdAt||0)-(b.createdAt||0));
 const a=await dbReq('meta','readonly',s=>s.get('active'));
 activeId=a||'';
 if(activeId&&!fonts.some(f=>f.id===activeId))activeId='';
+const cs=Number(await dbReq('meta','readonly',s=>s.get('chatSize')));
+chatSize=(cs>=SIZE_MIN&&cs<=SIZE_MAX)?Math.round(cs):0;
 }
 function applyActive(){
 restoreFontOverrides();
@@ -385,9 +403,17 @@ function render(){
 if(!root)return;
 const list=fonts.map(f=>'<article class="fm-card"><div class="fm-info"><b>'+(selMode?'<input type="checkbox" class="fm-chk" data-id="'+esc(f.id)+'"'+(sel.has(f.id)?' checked':'')+'>':'')+esc(f.name)+(f.id===activeId?' <span class="fm-tag">使用中</span>':'')+'</b><span>'+esc(srcLabel(f))+' | '+esc(f.fontFamily)+'</span></div>'+(selMode?'':'<div class="fm-actions"><button type="button" data-a="toggle" data-id="'+esc(f.id)+'" class="'+(f.id===activeId?'fm-on':'')+'">'+(f.id===activeId?'取消启用':'启用')+'</button><button type="button" data-a="del" data-id="'+esc(f.id)+'" class="danger">删除</button></div>')+'</article>').join('');
 const bar=selMode?'<div class="fm-tools"><button type="button" class="fm-btn fm-light" data-a="selall">全选</button><button type="button" class="fm-btn fm-light" data-a="selnone">取消全选</button><button type="button" class="fm-btn fm-primary" data-a="delsel">删除所选 ('+sel.size+')</button></div>':'';
-root.innerHTML='<div class="fm-wrap"><div class="fm-top"><b>字体管理器</b><span class="fm-count">共 '+fonts.length+' 个</span></div><div class="fm-tools"><button type="button" class="fm-btn fm-primary" data-a="paste">粘贴导入</button><button type="button" class="fm-btn fm-light" data-a="file">导入文件</button><button type="button" class="fm-btn fm-light" data-a="export">导出JSON</button><button type="button" class="fm-btn fm-light" data-a="batch">'+(selMode?'退出批量':'批量删除')+'</button></div>'+bar+'<input type="file" id="fm-file" class="fm-hidden" multiple accept=".ttf,.otf,.woff,.woff2,.json,.css,.txt"><div class="fm-list">'+list+(!fonts.length?'<div class="fm-empty">还没有字体</div>':'')+'</div><div id="fm-status"></div><details class="fm-details"><summary>运行日志（出问题时把这里的内容发给我）</summary><pre id="fm-log">'+esc(logs.join(NL))+'</pre></details></div>';
+root.innerHTML='<div class="fm-wrap"><div class="fm-top"><b>字体管理器</b><span class="fm-count">共 '+fonts.length+' 个</span></div><div class="fm-size"><div class="fm-size-head"><span>聊天字体大小</span><span><b id="fm-size-val">'+(chatSize||SIZE_DEF)+'px</b>'+(chatSize?'':' <i>(默认)</i>')+' <button type="button" class="fm-btn fm-light fm-size-reset">重置</button></span></div><input type="range" id="fm-size-range" min="'+SIZE_MIN+'" max="'+SIZE_MAX+'" step="1" value="'+(chatSize||SIZE_DEF)+'"></div><div class="fm-tools"><button type="button" class="fm-btn fm-primary" data-a="paste">粘贴导入</button><button type="button" class="fm-btn fm-light" data-a="file">导入文件</button><button type="button" class="fm-btn fm-light" data-a="export">导出JSON</button><button type="button" class="fm-btn fm-light" data-a="batch">'+(selMode?'退出批量':'批量删除')+'</button></div>'+bar+'<input type="file" id="fm-file" class="fm-hidden" multiple accept=".ttf,.otf,.woff,.woff2,.json,.css,.txt"><div class="fm-list">'+list+(!fonts.length?'<div class="fm-empty">还没有字体</div>':'')+'</div><div id="fm-status"></div><details class="fm-details"><summary>运行日志（出问题时把这里的内容发给我）</summary><pre id="fm-log">'+esc(logs.join(NL))+'</pre></details></div>';
 root.querySelectorAll('[data-a]').forEach(b=>{b.onclick=()=>action(b.dataset.a,b.dataset.id,b);});
 root.querySelectorAll('.fm-chk').forEach(c=>{c.onchange=()=>{if(c.checked)sel.add(c.dataset.id);else sel.delete(c.dataset.id);const b=root.querySelector('[data-a="delsel"]');if(b)b.textContent='删除所选 ('+sel.size+')';};});
+const rg=root.querySelector('#fm-size-range');
+const rv=root.querySelector('#fm-size-val');
+if(rg){
+rg.oninput=()=>{chatSize=Number(rg.value);if(rv)rv.textContent=chatSize+'px';applyChatSize();};
+rg.onchange=()=>{saveChatSize();log('聊天字号：'+chatSize+'px');};
+}
+const rs=root.querySelector('.fm-size-reset');
+if(rs)rs.onclick=()=>{chatSize=0;applyChatSize();saveChatSize();render();status('聊天字号已重置');};
 const fi=root.querySelector('#fm-file');
 fi.onchange=()=>{const fs=Array.from(fi.files||[]);fi.value='';if(fs.length)importFiles(fs);};
 }
@@ -411,6 +437,7 @@ async function init(){
 try{
 await loadAll();
 applyActive();
+applyChatSize();
 }catch(e){log('读取 IndexedDB 失败：'+e.message);}
 if(mount())return;
 let tries=0;
